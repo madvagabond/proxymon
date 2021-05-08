@@ -3,8 +3,9 @@ package proxymon
 import (
 	"net/http"
 	socks_client "h12.io/socks"
-
+	"strings"
 	"net/url"
+	"errors"
 )
 
 
@@ -88,4 +89,26 @@ func newSocksClient(p Proxy) (*http.Client) {
 	} 
 	
 }
+
+
+
+
+func newClient(p Proxy) (*http.Client, error)  {
+	if strings.Contains(p.Protocol, "http") {
+		return httpProxyClient(p), nil
+	}
+
+
+	if strings.Contains(p.Protocol, "socks") {
+		return newSocksClient(p), nil 
+	}
+
+
+	e := errors.New("Unsupported Protocol")
+	var c http.Client
+	
+	return &c, nil 
+}
+
+
 

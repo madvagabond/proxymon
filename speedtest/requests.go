@@ -121,7 +121,7 @@ func downloadReq(cli *http.Client, url string) (int, error) {
 
 
 
-func PingTest(cli *http.Client, url string) (time.Duration, error) {
+func pingTest(cli *http.Client, url string) (time.Duration, error) {
 
 
 	ep := strings.Split(url, "/upload.php")[0] + "/latency.txt"
@@ -145,7 +145,7 @@ func PingTest(cli *http.Client, url string) (time.Duration, error) {
 
 
 
-func checkSpeed(call func() (float64, error)) {
+func checkSpeed(call func() (int, error)) {
 	start := time.Now()
 	size, e := call()
 	end := time.Now()
@@ -158,28 +158,6 @@ func checkSpeed(call func() (float64, error)) {
 
 	return rate, nil 
 }
-
-
-
-func downloadTest(cli *http.Client, url string) (float64, error) {
-
-	start := time.Now()
-	size, err := downloadReq(cli, url)
-	end := time.Now()
-
-	if err != nil {
-		return 0.0, err 
-	}
-
-
-	t := end.Sub(start)
-
-	megs := float64(size) / math.Pow10(6))
-
-	speed :=  megs / t.Seconds()
-	return speed, nil 
-}
-
 
 
 
@@ -204,3 +182,4 @@ func uploadReq(cli *http.Client, url string) (int, error) {
 } 
 
 
+*
