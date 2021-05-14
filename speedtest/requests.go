@@ -5,7 +5,14 @@ import (
 	"io"
 	"encoding/xml"
 	"io/ioutil"
+	"time"
+	"strings"
+	"strconv"
+
+	"net/url"
+	"math"
 )
+
 
 
 
@@ -17,7 +24,7 @@ var servers_uri = "https://www.speedtest.net/speedtest-servers-static.php"
 
 
 type servers struct {
-	Servers []*Server `xml:"servers>server"`
+	Servers []Server `xml:"servers>server"`
 }
 
 type Server struct {
@@ -36,11 +43,11 @@ type Server struct {
 func getServers(cli *http.Client) ([]Server, error) {
 	rep, err := cli.Get(servers_uri)
 	data, err := io.ReadAll(rep.Body) 
-	
-	var servers serverList
+
+	var servers servers
 
 	if err != nil {
-		return []Server{}, e
+		return []Server{}, err
 	}
 
 	
@@ -55,17 +62,17 @@ func getServers(cli *http.Client) ([]Server, error) {
 
 
 
-func getClientConf(cli http.Client) (client_config, error) {
+func getClientConf(cli *http.Client) (client_config, error) {
 	resp, err := http.Get("http://speedtest.net/speedtest-config.php")
 
 	if err != nil {
-		var c client
+		var c client_config
 		return c, nil  
 	}
 
 
 	var c client_config
-	body, err := io.ReadAll(resp.Body )
+	body, e := io.ReadAll(resp.Body )
 
 	if err != nil {return c, e}
 	
@@ -79,42 +86,24 @@ func getClientConf(cli http.Client) (client_config, error) {
 
 
 
-func uploadReq(cli *http.Client, url string) error {
-	size := 1000
-	v := url.Values{}
-	v.Add("content", strings.Repeat("0123456789", size*100-51))
-
-	resp, err := cli.PostForm(url, v)
-
-	if err != nil {
-		return err
-	}
-	
-	defer resp.Body.Close()
-	ioutil.ReadAll(resp.Body)
-
-	return nil
-} 
-
-
 
 func downloadReq(cli *http.Client, url string) (int, error) {
 
 	size := 1500
 
 	dlURL := strings.Split(url, "/upload")[0]
-	url  := dlURL + strconv.Itoa(size) + "x" + strconv.Itoa(size) + ".jpg"
+	uri  := dlURL + strconv.Itoa(size) + "x" + strconv.Itoa(size) + ".jpg"
 
 
 	
-	resp, err := cli.Get(url)
-	if err != nil {return err}
+	resp, err := cli.Get(uri)
+	if err != nil {return 0, err}
 
-	buf := ioutil.ReadAll(resp.Body)
+	buf, e := ioutil.ReadAll(resp.Body)
 	
 	resp.Body.Close()
 
-	return len(buf), nil
+	return len(buf), e
 }
 
 
@@ -129,7 +118,7 @@ func pingTest(cli *http.Client, url string) (time.Duration, error) {
 
 	start := time.Now()
 	
-	rep, err := cli.Get(ep)
+	_, err := cli.Get(ep)
 	end := time.Now() 
 	
 	if err != nil {
@@ -137,7 +126,7 @@ func pingTest(cli *http.Client, url string) (time.Duration, error) {
 	}
 
 
-	return end.Sub(start)
+	return end.Sub(start), nil
 }
 
 
@@ -145,13 +134,13 @@ func pingTest(cli *http.Client, url string) (time.Duration, error) {
 
 
 
-func checkSpeed(call func() (int, error)) {
+func checkSpeed(call func() (int, error)) (float64, error ){
 	start := time.Now()
 	size, e := call()
 	end := time.Now()
 	
 	if e != nil {return 0.0, e}
-	t := end.Sub(s)
+	t := end.Sub(start)
 
 	megs := float64(size) / math.Pow10(6)
 	rate := megs / t.Seconds()
@@ -161,17 +150,17 @@ func checkSpeed(call func() (int, error)) {
 
 
 
-func uploadReq(cli *http.Client, url string) (int, error) {
+func uploadReq(cli *http.Client, uri string) (int, error) {
 	size := 1000
 	v := url.Values{}
 
 	
 	v.Add("content", strings.Repeat("0123456789", size*100-51))
 
-	resp, err := cli.PostForm(url, v)
+	resp, err := cli.PostForm(uri, v)
 
 	if err != nil {
-		return err
+		return 0, err
 	}
 	
 	defer resp.Body.Close()
@@ -181,5 +170,3 @@ func uploadReq(cli *http.Client, url string) (int, error) {
 	return written, nil
 } 
 
-
-*

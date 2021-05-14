@@ -5,15 +5,20 @@ import (
 	"encoding/xml"
 	"math"
 	"time"
-	""
+
+	"net/http"
+
+
+	"strconv"
+
 )
 
 
 
 type client_config struct {
 	XMLName xml.Name `xml:client`
-	Lon `xml:lon`
-	Lat `xml:lat`
+	Lon float64 `xml:lon`
+	Lat float64 `xml:lat`
 }
 
 
@@ -26,8 +31,8 @@ type Client struct {
 
 
 type Result struct {
-	UploadSpeed float64,
-	DownloadSpeed float64,
+	UploadSpeed float64
+	DownloadSpeed float64
 	PingLatency time.Duration
 }
 
@@ -49,12 +54,20 @@ func distance(lat1 float64, lon1 float64, lat2 float64, lon2 float64) float64 {
 
 
 func (cli client_config) distance(srv *Server) float64 {
-	distance(cli.Lat, cli.Lon, srv.Lat, srv.Lon)
+
+	f64 := func (str string) float64 {
+		
+		f, _ :=  strconv.ParseFloat(str, 64)
+		return f
+	}
+
+	
+	return distance(cli.Lat, cli.Lon, f64(srv.Lat), f64(srv.Lon))
 } 
 
 
 
-func (cli client_config) closest(srv []Servers) Server {
+func (cli client_config) closest(srvs []Server) Server {
 
 
 	closest := srvs[0]
@@ -62,8 +75,8 @@ func (cli client_config) closest(srv []Servers) Server {
 
 	
 	for _, v := range srvs {
-		dist := cli.distance(v)
-		mdist := cli.distance(closest)
+		dist := cli.distance(&v)
+		mdist := cli.distance(&closest)
 
 		if dist < mdist {
 			closest = v 
@@ -86,7 +99,7 @@ func NewClient(http_client *http.Client) (Client, error) {
 	var c Client
 	if e != nil {return c, e}
 
-	server := config.closest()
+	server := config.closest(servers)
 
 	return Client{http_client, server}, nil
 }
@@ -94,7 +107,7 @@ func NewClient(http_client *http.Client) (Client, error) {
 
 func (cli *Client) DownloadTest() (float64, error) {
 
-	dl_f := func() {
+	dl_f := func () (int, error) {
 		return downloadReq(cli.http_client, cli.server.URL)
 	}
 
@@ -104,7 +117,7 @@ func (cli *Client) DownloadTest() (float64, error) {
 
 
 func (cli *Client) UploadTest() (float64, error) {
-	ul_f := func() {
+	ul_f := func() (int, error) {
 		return uploadReq(cli.http_client, cli.server.URL)
 	}
 
@@ -114,7 +127,7 @@ func (cli *Client) UploadTest() (float64, error) {
 
 
 func (cli *Client) PingTest() (time.Duration, error) {
-	pingTest(cli.http_client, cli.server.URL)
+	return pingTest(cli.http_client, cli.server.URL)
 }
 
 
