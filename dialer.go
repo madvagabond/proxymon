@@ -6,13 +6,17 @@ import (
 	"strings"
 	"net/url"
 	"errors"
+	"net"
+	"context"
+	"github.com/xnukernpoll/proxymon/speedtest"
+	"log"
 )
 
 
 
 
 func httpProxyClient(p Proxy) (*http.Client, error) {
-	proxy_s := p.toUri() 
+	proxy_s := p.ToUri() 
 	p_url, err := url.Parse(proxy_s)
 
 	if err != nil {
@@ -20,10 +24,10 @@ func httpProxyClient(p Proxy) (*http.Client, error) {
 		return nil, err
 	}
 
-	trans := &http.Transport{ Proxy: http.ProxyUrl(ProxyUrl) }
+	trans := &http.Transport{ Proxy: http.ProxyURL(p_url) }
 
 	client := http.Client{
-		Transport: trans 
+		Transport: trans, 
  	}
 
 
@@ -41,20 +45,22 @@ type socksSession struct {
 
 
 
-type dialResult {conn net.Conn, error error}
+type dialResult struct {
+	conn net.Conn
+	error error
+}
 
 
 
-func ctxSelector(ctx context.Context, d func() dialResult) (net.Conn, error) {
+func ctxSelector(ctx context.Context, d func() (net.Conn, error) ) (net.Conn, error) {
 
 	res_ch := make(chan dialResult)
 
 	go func() {
-		conn, err:= d()
+		conn, err := d()
 		res := dialResult{conn, err}
 		res_ch <- res 
-	}
-
+	}()
 
 	select {
 	case <- ctx.Done():
@@ -62,17 +68,15 @@ func ctxSelector(ctx context.Context, d func() dialResult) (net.Conn, error) {
 		return c, errors.New("Context expired before connection could be established.") 
 
 
-	case res := <- res_ch 
+	case res := <- res_ch: 
 		return res.conn, res.error
 	} 
 	
 } 
 
 
-func (s *socksSession) DialContext(ctx context.Context, net, addr string) (net.Conn, error) {
-	socksClient.newClient()
-	
-	uri := s.Proxy.ToUri() 
+func (s *socksSession) DialContext(ctx context.Context, net, addr string) (net.Conn, error) {	
+	uri := s.proxy.ToUri() 
 	dialer := socks_client.Dial(uri)
 	return dialer(net, addr)
 }
@@ -82,10 +86,10 @@ func (s *socksSession) DialContext(ctx context.Context, net, addr string) (net.C
 
 func newSocksClient(p Proxy) (*http.Client) {
 	session := socksSession{p}
-	transport := http.Transport{ DialContext: session }
+	transport := http.Transport{ DialContext: session.DialContext }
 	
 	return &http.Client{
-		Transport: &transport
+		Transport: &transport,
 	} 
 	
 }
@@ -95,7 +99,7 @@ func newSocksClient(p Proxy) (*http.Client) {
 
 func newClient(p Proxy) (*http.Client, error)  {
 	if strings.Contains(p.Protocol, "http") {
-		return httpProxyClient(p), nil
+		return httpProxyClient(p)
 	}
 
 
@@ -107,8 +111,19 @@ func newClient(p Proxy) (*http.Client, error)  {
 	e := errors.New("Unsupported Protocol")
 	var c http.Client
 	
-	return &c, nil 
+	return &c, e 
 }
 
+
+
+func newSpeedTester(p Proxy) (speedtest.Client, error) {
+	c, e := newClient(p)
+	if e != nil {
+		var cli speedtest.Client
+		return cli,e
+	}
+	
+	return speedtest.NewClient(c)
+}
 
 

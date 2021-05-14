@@ -1,7 +1,9 @@
 package proxymon
+
 import (
 	"time"
 	"sync"
+	"github.com/xnukernpoll/proxymon/speedtest"
 
 )
 
@@ -10,9 +12,9 @@ import (
 /* Add Availability Tracker Metric Later*/
 
 type Metrics struct {
-	Upload float
-	Download float
-	Ping float
+	Upload float64
+	Download float64
+	Ping time.Duration
 
 	SuccessfulPings int 
 	FailedPings int 
@@ -25,27 +27,27 @@ type Metrics struct {
 
 
 
-func (m *Metrics) Uptime() float {
+func (m *Metrics) Uptime() float64 {
 	total := m.SuccessfulPings + m.FailedPings
-	return m.SuccessfulPings / total
+	return float64(m.SuccessfulPings) / float64(total)
 } 
 
 
 
-func (m *Metrics) Merge(res Result) {
+func (m *Metrics) Merge(res speedtest.Result) {
 
 	t := time.Now()
 	m.Upload = res.UploadSpeed
 	m.Download = res.DownloadSpeed
 	m.Ping = res.PingLatency
 	
-	m.SuccessfulPings + 1
-	m.LastSeen
+	m.SuccessfulPings += 1
+	m.LastSeen = t
 }
 
 type Node struct {
 	Proxy
-	Metric
+	Metrics
 }
  
 
@@ -62,11 +64,12 @@ type Config struct {
 
 
 
-type EventDelegate interface {
-	func HandleAdd(n Node)
-	func HandleDead(n Node)
-	func HandleRemove(n Node)
-	func HandleUpdate(n Node)
+type Delegate interface {
+
+	HandleAdd(n Node)
+	HandleDead(n Node)
+	HandleRemove(n Node)
+	HandleUpdate(n Node)
 }
 
 
@@ -88,7 +91,7 @@ type Monitor struct {
 
 func testSpeed(p Proxy) (speedtest.Result, error) {
 	
-	tester, e := NewSpeedTester(p)
+	tester, e := newSpeedTester(p)
 	
 	if e != nil {
 		var res speedtest.Result
@@ -112,12 +115,16 @@ func makeNode(p Proxy, res speedtest.Result) Node {
 
 
 	return Node{
+		p,
+
+		Metrics{
 		Ping: res.PingLatency,
 		Download: res.DownloadSpeed,
-		UploadSpeed: res.UploadSpeed,
+		Upload: res.UploadSpeed,
 		LastSeen: t,
 		SuccessfulPings: 1,
-		FailedPings: 0, 
+		FailedPings: 0,
+	},
 	}
 
 	
@@ -153,7 +160,7 @@ func (m *Monitor) addOrUpdate(proxy Proxy, result speedtest.Result) {
 
 
 	m.up[proxy] = makeNode(proxy, result)
-	go m.delegate.HandleAdd()
+	go m.delegate.HandleAdd(n)
 
 	
 }
@@ -162,8 +169,8 @@ func (m *Monitor) addOrUpdate(proxy Proxy, result speedtest.Result) {
 func (m *Monitor) Add(p Proxy) {
 
 	m.lock.RLock()
-	_, e := up[p]
-	_, e1 := down[p]
+	_, e := m.up[p]
+	_, e1 := m.down[p]
 
 	m.lock.RUnlock()
 
@@ -175,9 +182,9 @@ func (m *Monitor) Add(p Proxy) {
 	}
 
 
-	res, e := testSpeed(p)
+	res, err := testSpeed(p)
 
-	if e != nil {
+	if err != nil {
 		return
 	}
 
@@ -240,24 +247,24 @@ func (m *Monitor) markDead(p Proxy) {
 func (m *Monitor) speedtest(n Node) {
 
 
-	<- m.bw_permits
-	res, e := testSpeed(n)
+	m.bw_permits.acquire()
+	res, e := testSpeed(n.Proxy)
 
-	bw_permits <- 1
+	m.bw_permits.release()
 	
 	
 	if e != nil {
-		m.markDead(n)
+		m.markDead(n.Proxy)
 		return
 	}
 
-	m.addOrUpdate(n, res)
+	m.addOrUpdate(n.Proxy, res)
 }
 
 
 
 
-func (m *Monitor) pingSuccess(p Proxy, t time.Time) {
+func (m *Monitor) pingSuccess(p Proxy, t time.Time, latency time.Duration) {
 	defer m.lock.Unlock()
 	m.lock.Lock()
 
@@ -268,15 +275,16 @@ func (m *Monitor) pingSuccess(p Proxy, t time.Time) {
 	if e {
 
 		a.SuccessfulPings += 1 
-		a.LastSeen = t 
+		a.LastSeen = t
+		a.Ping = latency
 		m.up[p] = a
 	}
 
 
 	if e1 {
-		a.SuccessfulPings += 1 
+		d.SuccessfulPings += 1 
 		d.LastSeen = t
-		
+		d.Ping = latency
 		delete(m.down, p)
 		m.up[p] = d
 	}
@@ -288,10 +296,10 @@ func (m *Monitor) pingSuccess(p Proxy, t time.Time) {
 func (m *Monitor) pingNode(n Node) {
 
 
-	tester, e := NewSpeedTester(p)
+	tester, e := newSpeedTester(n.Proxy)
 	
 	if e != nil {
-		m.markDead(n)
+		m.markDead(n.Proxy)
 		return 
 	}
 
@@ -300,9 +308,9 @@ func (m *Monitor) pingNode(n Node) {
 	t := time.Now()
 	
 	if e != nil {
-		m.markDead()
+		m.markDead(n.Proxy)
 		return 
 	}
 
-	m.pingSuccess(n)
+	m.pingSuccess(n.Proxy, t, l)
 } 

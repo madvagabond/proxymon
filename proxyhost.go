@@ -1,7 +1,7 @@
 package proxymon
 
 import (
-	"http"
+	//"net/http"
 	"strings"
 	"errors"	
 )
@@ -16,7 +16,7 @@ type Proxy struct {
 
 
 func parseProto(v string) (string, error) {
-	tok := strings.ToLower( before("://") )
+	tok := strings.ToLower( before(v, "://") )
 
 	switch tok {
 	case "socks":
@@ -31,11 +31,11 @@ func parseProto(v string) (string, error) {
 	case "http":
 		return tok, nil
 
-	case https:
+	case "https":
 		return tok, nil
 
 	default:
-		return nil, errors.New("invalid proxy protocol scheme") 
+		return "", errors.New("invalid proxy protocol scheme") 
 	}
 }
 
@@ -47,9 +47,11 @@ func parseProto(v string) (string, error) {
 func before(value string, a string) string {
     // Get substring before a string.
     pos := strings.Index(value, a)
-    if pos == -1 {
+
+	if pos == -1 {
         return ""
     }
+	
     return value[0:pos]
 }
 
@@ -124,8 +126,8 @@ func ParseProxyString(s string) (Proxy, error) {
 	   used after :// twice is a bit inefficient for http
 	   
 	*/
-	user, pass := parseAuth(s1)
-	host := parseHost(s1)
+	user, pass := parseAuth(s)
+	host := parseHost(s)
 
 	p := Proxy{
 		Protocol: proto,
@@ -139,30 +141,9 @@ func ParseProxyString(s string) (Proxy, error) {
 }
 
 
+func (p *Proxy) ToUri() string {
 
-
-func (s *Socks) ToUri() string {
-
-	var prefix string
-
-	protocol := s.Protocol() 
-
-	if protocol == socks4 {
-		prefix = "socks4://"
-	}
-
-	if protocol == socks5 {
-		prefix = "socks5://"
-	}
-
-
-	if protocol == socks4a {
-		prefix = "socks4a://"
-	}
-
-
-	uri := prefix + s.User + ":" s.Password + "@" + s.Host
-	return uri  
-
-	
+	return p.Protocol + "://" + p.Username + ":" + p.Password + "@" + p.Host 
 }
+
+
