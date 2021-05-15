@@ -85,7 +85,11 @@ type Monitor struct {
 	down map[Proxy]Node
 
 	delegate Delegate
-	config Config 
+	config Config
+
+	bandwidth_timer time.Ticker
+	ping_timer time.Ticker
+	gc_timer time.Ticker
 }
 
 
@@ -314,3 +318,52 @@ func (m *Monitor) pingNode(n Node) {
 
 	m.pingSuccess(n.Proxy, t, l)
 } 
+
+
+
+
+
+
+
+func (m *Monitor) allNodes() []Node {
+	var nodes []Node
+	
+	for _, v := range m.up {
+		nodes = append(nodes, v)
+	}
+
+
+	for _, v := range m.down {
+		nodes = append(nodes, v)
+	}
+	return nodes
+}
+
+
+
+func (m *Monitor) ping_proc() {
+
+	for {
+		<- m.ping_timer.C
+		for _, v := range  m.allNodes() {
+			go m.pingNode(v)
+		}
+
+		m.ping_timer.Reset(m.config.PingInterval)
+	}
+}
+
+
+
+func (m *Monitor) bw_proc() {
+	for {
+		<- m.bandwidth_timer.C
+		for _, v := range m.allNodes() {
+			go m.speedtest(v)
+		}
+
+		m.bandwidth_timer.Reset(m.config.BandwidthTestInterval)
+
+	}
+
+}
