@@ -4,6 +4,7 @@ import (
 	"time"
 	"sync"
 	"github.com/xnukernpoll/proxymon/speedtest"
+	"log"
 
 )
 
@@ -29,13 +30,45 @@ type Monitor struct {
 	delegate Delegate
 	config Config
 
-	bandwidth_timer time.Ticker
-	ping_timer time.Ticker
-	gc_timer time.Ticker
+	bandwidth_timer *time.Timer
+	ping_timer *time.Timer
+	gc_timer *time.Timer
 }
 
 
 
+
+
+
+func NewMonitor(c Config, d Delegate) Monitor {
+	lock := sync.RWMutex{}
+	bw_permits := make_semaphore(c.ConcurrencyLevel)
+	p_permits := make_semaphore(c.ConcurrencyLevel)
+	bandwidth_timer := time.NewTimer(c.BandwidthTestInterval)
+	ping_timer := time.NewTimer(c.PingInterval)
+	gc_timer := time.NewTimer(c.DeadExpiry)
+
+	up := make(map[Proxy]Node)
+	down := make(map[Proxy]Node)
+
+	
+	return Monitor {
+		lock,
+		bw_permits,
+		p_permits,
+		up,
+		down,
+		d,
+		c, 
+		bandwidth_timer,
+		ping_timer,
+		gc_timer,
+	
+	}
+
+
+	
+}
 
 
 type Delegate interface {
@@ -119,6 +152,7 @@ func (m *Monitor) Add(p Proxy) {
 	res, err := testSpeed(p)
 
 	if err != nil {
+		log.Println("Unable to add proxy because speed test failed")
 		return
 	}
 
@@ -299,3 +333,5 @@ func (m *Monitor) bw_proc() {
 	}
 
 }
+
+

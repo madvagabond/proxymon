@@ -2,7 +2,6 @@ package proxymon
 
 import (
 	"time"
-	"sync"
 	"github.com/xnukernpoll/proxymon/speedtest"
 
 )
