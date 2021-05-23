@@ -92,7 +92,7 @@ func downloadReq(cli *http.Client, url string) (int, error) {
 	size := 1500
 
 	dlURL := strings.Split(url, "/upload")[0]
-	uri  := dlURL + strconv.Itoa(size) + "x" + strconv.Itoa(size) + ".jpg"
+	uri  := dlURL + "/random" + strconv.Itoa(size) + "x" + strconv.Itoa(size) + ".jpg"
 
 
 	
